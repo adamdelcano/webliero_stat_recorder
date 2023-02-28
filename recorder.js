@@ -10,6 +10,8 @@ function parse_game_stats(){
     game['scores'] = [];
     let winning_score = 0;
     let has_nonzero_score = false;
+    let team_game = (game_type == "Team Deathmatch");
+    let teams = [[],[]];
     scoreboard.children[1].childNodes.forEach(function(stat_row, i){
         stat_row.childNodes.forEach(function(stats, j){
             if(j >= 1){
@@ -22,6 +24,7 @@ function parse_game_stats(){
                 }
                 if(score != ""){
                     game['scores'].push({name, score, kills, deaths});
+                    teams[i].push(name);
                     if(j == 1){
                         game['winner'] = name;
                         winning_score = score;
@@ -33,6 +36,27 @@ function parse_game_stats(){
             }
         });
     });
+    if (team_game) {
+        let team_one_score = document.querySelector('[data-hook=team1-score]').textContent;
+        let team_one_name = teams[0].reduce(
+            function(prev, curr){return prev + ' ' + curr},
+            'Team: '
+        );
+        let team_two_name = teams[1].reduce(
+            function(prev, curr){return prev + ' ' + curr},
+            'Team: '
+        );
+        let team_two_score = document.querySelector('[data-hook=team2-score]').textContent;
+        if (team_one_score > team_two_score){
+            game['winner'] = team_one_name;  
+        };
+        if (team_one_score < team_one_score) {
+            game['winner'] = team_two_name;
+        };
+        if (team_one_score == team_two_score) {
+            game['winner'] = team_one_name + " - TIE - " + team_two_score;
+        };
+    };
     let gameHash = JSON.stringify(game);
     if(gameHashesRecorded.indexOf(gameHash) == -1 && game.scores.length > 1 && has_nonzero_score) {
         console.log("Pushing new game to our array.");
