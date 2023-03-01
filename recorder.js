@@ -10,10 +10,27 @@ function parse_game_stats(){
     game['scores'] = [];
     let winning_score = 0;
     let has_nonzero_score = false;
-    let team_game = (game.game_type == "Team Deathmatch");
-    let teams = [[],[]];
+    let is_team_game = (game.game_type == "Team Deathmatch");
+    let teams = [[], []];
+    let team_scores = [];
     scoreboard.children[1].childNodes.forEach(function(stat_row, i){
         stat_row.childNodes.forEach(function(stats, j){
+            /* this is the team name row, ignore if not a team game */
+            if (j == 0 && is_team_game){
+                let team_name;
+                let team_score;
+                /* Name/score locations vary between the team rows */
+                if( i == 0 ){
+                    team_name = stats.children[0].children[0].children[0].textContent;
+                    team_score = stats.children[0].children[0].children[1].textContent;
+                } else {
+                    team_name = stats.children[0].children[0].childNodes[0].textContent.trimEnd();
+                    team_score = stats.children[0].children[0].children[0].textContent;
+                };
+                teams[i].push(team_name);
+                team_scores.push(team_score);
+            };
+            /* player rows */
             if(j >= 1){
                 let name = stats.children[0].children[1].textContent;
                 let score = stats.children[1].textContent;
@@ -23,39 +40,38 @@ function parse_game_stats(){
                     has_nonzero_score = true;
                 }
                 if(score != ""){
+                    if (is_team_game) {
+                        teams[i].push(name);
+                        name = '[' + teams[i][0] + ']' + name;
+                    } else {
+                        /* if not team game check for winner */
+                        if(j == 1){
+                            game['winner'] = name;
+                            winning_score = score;
+                        } else if(j > 1 && score == winning_score){
+                            game['winner'] = game['winner'] + " - TIE - " + name;
+                        }
+                    };
                     game['scores'].push({name, score, kills, deaths});
-                    teams[i].push(name);
-                    if(j == 1){
-                        game['winner'] = name;
-                        winning_score = score;
-                    }
-                    if(j > 1 && score == winning_score){
-                        game['winner'] = game['winner'] + " - TIE - " + name;
-                    }
                 }
             }
         });
     });
-    if (team_game) {
-        let team_one_score = document.querySelector('[data-hook=team1-score]').textContent;
-        let team_one_name = teams[0].reduce(
-            function(prev, curr){return prev + ' ' + curr},
-            'Team: '
+    /* In team games, determine winner by highest team score */
+    if (is_team_game) {
+        let winning_team;
+        if (team_scores[0] > team_scores[1]){
+            winning_team = teams[0];
+        } else if (team_scores[0] < team_scores[1]) {
+            winning_team = teams[1];
+        } else if (team_scores[0] == team_scores[1]) {
+            winning_team = teams[0].concat(["- TIE -"], teams[1]);
+        };
+        /* Team name formatting */
+        game["winner"] = winning_team.reduce(
+                function(prev, curr){return prev + ' ' + curr},
+                /* no initial state but here's where it would go */
         );
-        let team_two_name = teams[1].reduce(
-            function(prev, curr){return prev + ' ' + curr},
-            'Team: '
-        );
-        let team_two_score = document.querySelector('[data-hook=team2-score]').textContent;
-        if (team_one_score > team_two_score){
-            game['winner'] = team_one_name;  
-        };
-        if (team_one_score < team_two_score) {
-            game['winner'] = team_two_name;
-        };
-        if (team_one_score == team_two_score) {
-            game['winner'] = team_one_name + " - TIE - " + team_two_score;
-        };
     };
     let gameHash = JSON.stringify(game);
     if(gameHashesRecorded.indexOf(gameHash) == -1 && game.scores.length > 1 && has_nonzero_score) {
