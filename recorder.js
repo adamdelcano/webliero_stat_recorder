@@ -12,7 +12,7 @@ function parse_game_stats(){
     let has_nonzero_score = false;
     let is_team_game = (game.game_type == "Team Deathmatch");
     let teams = [[], []];
-    let team_scores = [];
+    let winning_team;
     scoreboard.children[1].childNodes.forEach(function(stat_row, i){
         stat_row.childNodes.forEach(function(stats, j){
             /* this is the team name row, ignore if not a team game */
@@ -28,7 +28,12 @@ function parse_game_stats(){
                     team_score = stats.children[0].children[0].children[0].textContent;
                 };
                 teams[i].push(team_name);
-                team_scores.push(team_score);
+                if (team_score > winning_score){
+                    winning_score = team_score;
+                    winning_team = i;
+                } else if (team_score == winning_score){
+                    winning_team = "tie";
+                }
             };
             /* player rows */
             if(j >= 1){
@@ -59,16 +64,22 @@ function parse_game_stats(){
     });
     /* In team games, determine winner by highest team score */
     if (is_team_game) {
-        let winning_team;
-        if (team_scores[0] > team_scores[1]){
-            winning_team = teams[0];
-        } else if (team_scores[0] < team_scores[1]) {
-            winning_team = teams[1];
-        } else if (team_scores[0] == team_scores[1]) {
-            winning_team = teams[0].concat(["- TIE -"], teams[1]);
+        /* Put team name in front then display the members alphabetically */
+        teams = teams.map(
+            (arr)=>{
+                let front = arr.shift();
+                arr.sort().unshift(front);
+                return arr;
+            });
+        /* handle ties */
+        let team;
+        if (winning_team == "tie"){
+            team = teams[0].concat(["- TIE -"], teams[1]);
+        } else {
+            team = teams[winning_team];
         };
         /* Team name formatting */
-        game["winner"] = winning_team.reduce(
+        game["winner"] = team.reduce(
                 function(prev, curr){return prev + ' ' + curr},
                 /* no initial state but here's where it would go */
         );
