@@ -10,8 +10,32 @@ function parse_game_stats(){
     game['scores'] = [];
     let winning_score = 0;
     let has_nonzero_score = false;
+    let is_team_game = (game.game_type === "Team Deathmatch");
+    let teams = [[], []];
+    let winning_team;
     scoreboard.children[1].childNodes.forEach(function(stat_row, i){
         stat_row.childNodes.forEach(function(stats, j){
+            /* this is the team name row, ignore if not a team game */
+            if (j === 0 && is_team_game){
+                let team_name;
+                let team_score;
+                /* Name/score locations vary between the team rows */
+                if( i === 0 ){
+                    team_name = stats.children[0].children[0].children[0].textContent;
+                    team_score = stats.children[0].children[0].children[1].textContent;
+                } else {
+                    team_name = stats.children[0].children[0].childNodes[0].textContent.trimEnd();
+                    team_score = stats.children[0].children[0].children[0].textContent;
+                };
+                teams[i].push(team_name);
+                if (team_score > winning_score){
+                    winning_score = team_score;
+                    winning_team = i;
+                } else if (team_score === winning_score){
+                    winning_team = "tie";
+                }
+            };
+            /* player rows */
             if(j >= 1){
                 let name = stats.children[0].children[1].textContent;
                 let score = stats.children[1].textContent;
@@ -21,25 +45,51 @@ function parse_game_stats(){
                     has_nonzero_score = true;
                 }
                 if(score != ""){
+                    if (is_team_game) {
+                        teams[i].push(name);
+                        name = '[' + teams[i][0] + ']' + name;
+                    } else {
+                        /* if not team game check for winner */
+                        if(j === 1){
+                            game['winner'] = name;
+                            winning_score = score;
+                        } else if(j > 1 && score === winning_score){
+                            game['winner'] = game['winner'] + " - TIE - " + name;
+                        }
+                    };
                     game['scores'].push({name, score, kills, deaths});
-                    if(j == 1){
-                        game['winner'] = name;
-                        winning_score = score;
-                    }
-                    if(j > 1 && score == winning_score){
-                        game['winner'] = game['winner'] + " - TIE - " + name;
-                    }
                 }
             }
         });
     });
+    /* In team games, determine winner by highest team score */
+    if (is_team_game) {
+        /* Put team name in front then display the members alphabetically */
+        teams = teams.map(
+            (arr)=>{
+                let front = arr.shift();
+                arr.sort().unshift(front);
+                return arr;
+            });
+        /* handle ties */
+        let team;
+        if (winning_team === "tie"){
+            team = teams[0].concat(["- TIE -"], teams[1]);
+        } else {
+            team = teams[winning_team];
+        };
+        /* Team name formatting */
+        game["winner"] = team.reduce(
+                function(prev, curr){return prev + ' ' + curr},
+        );
+    };
     let gameHash = JSON.stringify(game);
-    if(gameHashesRecorded.indexOf(gameHash) == -1 && game.scores.length > 1 && has_nonzero_score) {
+    if(gameHashesRecorded.indexOf(gameHash) === -1 && game.scores.length > 1 && has_nonzero_score) {
         console.log("Pushing new game to our array.");
         gameHashesRecorded.push(gameHash);
         gameStats.push(game);
     }
-}
+};
 
 function compile_game_stats() {
     let gamestr = format_games_string(gameStats);
@@ -47,17 +97,17 @@ function compile_game_stats() {
     let slackstr = format_slack_string(gameStats.length, winners, gamestr);
     send_slack_message(slackstr);
     return "Check slack if your games have saved! If not run 'compile_game_stats()' in your console.";
-}
+};
 
 function format_games_string(stats) {
-    // assume no score/kills/deaths > 9999
-    let gamestr = ""
+    /* assume no score/kills/deaths > 9999 */
+    let gamestr = "";
     let margin = 2;
     let longest_name_length = stats.flatMap(
         (game) => game.scores.map((score) => score.name)
     ).reduce((acc, b) => Math.max(acc, b.length, 0), 0);
     stats.forEach(function(game) {
-        gamestr += game.level_name + " - " + game.game_type + "\n"
+        gamestr += game.level_name + " - " + game.game_type + "\n";
         gamestr += "Name" + spaces(longest_name_length - 4 + margin) + "score  kills  deaths\n";
         game.scores.forEach(function(score) {
             gamestr += score.name 
@@ -73,18 +123,18 @@ function format_games_string(stats) {
 
     });
     return gamestr;
-}
+};
 
 function spaces(number) {
     if (number < -1) {
         number = -1;
     }
     return new Array(number + 1).join(" ");
-}
+};
 
 function right_align(header_name, data) {
     return spaces(header_name.length - data.length) + data;
-}
+};
 
 function calculate_winners(stats) {
     let winners = {};
@@ -96,17 +146,17 @@ function calculate_winners(stats) {
         }
     });
     return winners;
-}
+};
 
 function format_slack_string(num_games, winners, gamestr) {
-    let slackstr = "```\n"
+    let slackstr = "```\n";
     slackstr += "Total games: " + num_games + "\nWinners:\n";
     for (player_name in winners) {
         slackstr += "\t" + player_name + "\t" + winners[player_name] + "\n";
-    }
+    };
     slackstr += "\n" + gamestr + "\n```";
     return slackstr;
-}
+};
 
 /* 
  * Change the channel, username and target URLs in the following block
@@ -119,16 +169,16 @@ function send_slack_message(message) {
         username: "example_user",
         text: message,
         icon_emoji: ":feelsgood:"
-    }
+    };
     fetch(
-        // TARGET URL GOES HERE FORMATTED AS STRING
-        // "https://example.foo/bar"
+        /* TARGET URL GOES HERE FORMATTED AS STRING
+         "https://example.foo/bar" */
         {
             method: "POST",
             body: JSON.stringify(payload)
         }
     );
-}
+};
 
 testGameStats = [
     {
@@ -150,25 +200,26 @@ testGameStats = [
         ],
         "winner": "[FeDonkey]Morgoth"
     }
-]
-//console.log(format_games_string(testGameStats));
+];
+
+/* console.log(format_games_string(testGameStats)); */
 
 function createButton(label, handler) {
     var button = document.createElement("button");
     button.innerHTML = label;
     button.onclick = handler;
-    button.style = "display: inline-block; font-size: 24px; padding: 20px; background-color: yellow;"
+    button.style = "display: inline-block; font-size: 24px; padding: 20px; background-color: yellow; background: transparent";
     return button;
-}
+};
 
 function createButtonArray(buttons) {
     let div = document.createElement("div");
-    div.style = "position: fixed; bottom: 0; right: 0; z-index: 999;"
+    div.style = "position: fixed; bottom: 0; right: 0; z-index: 999;";
     for (var label in buttons) {
         div.appendChild(createButton(label, buttons[label]))
-    }
+    };
     return div;
-}
+};
 
 let buttonDiv = createButtonArray({
     debug: function() {
