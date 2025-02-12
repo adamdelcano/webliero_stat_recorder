@@ -1,5 +1,6 @@
-var gameStats = [];
-var gameHashesRecorded = [];
+let gameStats = [];
+let gameHashesRecorded = [];
+
 
 function parse_game_stats(){
     let game = {};
@@ -17,6 +18,7 @@ function parse_game_stats(){
                 let score = stats.children[1].textContent;
                 let kills = stats.children[2].textContent;
                 let deaths = stats.children[3].textContent;
+
                 if(score != 0){
                     has_nonzero_score = true;
                 }
@@ -44,10 +46,12 @@ function parse_game_stats(){
 function compile_game_stats() {
     let gamestr = format_games_string(gameStats);
     let winners = calculate_winners(gameStats);
-    let slackstr = format_slack_string(gameStats.length, winners, gamestr);
+    let playerstr = format_playerstr(calculate_player_stats(gameStats));
+    let slackstr = format_slack_string(gameStats.length, winners, gamestr, playerstr);
     send_slack_message(slackstr);
     return "Check slack if your games have saved! If not run 'compile_game_stats()' in your console.";
 }
+
 
 function format_games_string(stats) {
     // assume no score/kills/deaths > 9999
@@ -98,13 +102,59 @@ function calculate_winners(stats) {
     return winners;
 }
 
-function format_slack_string(num_games, winners, gamestr) {
+function score_update(currentScore, newScore) {
+    return currentScore.map((value, index) => parseInt(value) += parseInt(newScore[index]))
+};
+
+function calculate_player_stats(stats) {
+    let players = new Map();
+    stats.forEach((game) => {
+        game.scores.forEach(
+            ({name, score, kills, deaths}) => {
+                if (players.has(name)) {
+                    players.set(name, score_update(players.get(name), [score, kills, deaths]))
+                }
+                else {
+                    players.set(name, [score, kills, deaths])
+                }
+            }
+        )
+    }
+    )
+    return players
+};
+
+function format_playerstr(players) {
+    playerstr = "";
+    // assume no score/kills/deaths > 9999
+    let margin = 2;
+    let longest_name_length = players.keys().reduce((acc, b) => Math.max(acc, b.length, 0), 0);
+    playerstr += "Name" + spaces(longest_name_length - 4 + margin) + "score  kills  deaths\n";
+    players.forEach(
+        (value, key, map) => {
+            playerstr += key
+            + spaces(longest_name_length - key.length + margin)
+            + right_align("score", value[0].toString())
+            + spaces(margin) 
+            + right_align("kills", value[1].toString())
+            + spaces(margin) 
+            + right_align("deaths", value[2].toString()) 
+            + "\n";
+
+    });
+    playerstr += '\n'
+    return playerstr
+};
+
+function format_slack_string(num_games, winners, gamestr, playerstr) {
     let slackstr = "```\n"
     slackstr += "Total games: " + num_games + "\nWinners:\n";
     for (player_name in winners) {
         slackstr += "\t" + player_name + "\t" + winners[player_name] + "\n";
     }
-    slackstr += "\n" + gamestr + "\n```";
+    slackstr += "\n" + gamestr + "\n";
+    slackstr += "Player Totals Across All Games:\n";
+    slackstr += playerstr + "\n```";
     return slackstr;
 }
 
@@ -176,10 +226,12 @@ let buttonDiv = createButtonArray({
         console.log("gameHashesRecorded", gameHashesRecorded);
         let gamestr = format_games_string(gameStats);
         let winners = calculate_winners(gameStats);
-        let slackstr = format_slack_string(gameStats.length, winners, gamestr);
+        let playerstr = format_playerstr(calculate_player_stats(gameStats));
+        let slackstr = format_slack_string(gameStats.length, winners, gamestr, playerstr);
         console.log("gamestr", gamestr);
         console.log("winners", winners);
         console.log("slackstr", slackstr);
+        console.log('playerstr', playerstr);
     },
     "send it": compile_game_stats
 });
